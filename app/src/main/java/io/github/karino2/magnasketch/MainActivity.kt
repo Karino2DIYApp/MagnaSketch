@@ -1,17 +1,24 @@
 package io.github.karino2.magnasketch
 
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.Rect
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.onyx.android.sdk.data.note.TouchPoint
@@ -19,6 +26,7 @@ import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.data.TouchPointList
 import androidx.core.graphics.createBitmap
+import java.io.File
 import kotlin.math.abs
 
 
@@ -37,11 +45,29 @@ class MainActivity : AppCompatActivity() {
         strokeWidth = penWidth
     }
 
-    val bitmap by lazy { createBitmap(surface.width, surface.height)}
+    val bmpPaint = Paint(Paint.DITHER_FLAG)
+
+    val bitmap by lazy {
+        val bmp = createBitmap(surface.width, surface.height)
+        val bcanvas = Canvas(bmp)
+        try {
+            val sbmp = openFileInput(fileName).use {
+                BitmapFactory.decodeStream(it)
+            }
+            bcanvas.drawBitmap(sbmp, 0f, 0f, bmpPaint)
+        }catch(_: java.io.FileNotFoundException)
+        {
+            bcanvas.drawColor(Color.WHITE)
+        }
+        bmp
+    }
     val bmpCanvas by lazy { Canvas(bitmap) }
+
+    var isDirty = false
 
     fun drawScribbleToBitmap(points: List<TouchPoint>) {
         if (points.isEmpty()) return
+        isDirty = true
         val path = Path()
         val prePoint = PointF(points[0].x, points[0].y)
         path.moveTo(prePoint.x, prePoint.y)
@@ -99,7 +125,7 @@ class MainActivity : AppCompatActivity() {
 
     private val layoutChangedListener : View.OnLayoutChangeListener by lazy {
         View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            if (clearSurfaceView()) {
+            if (clearSurfaceView(bitmap)) {
                 surface.removeOnLayoutChangeListener(layoutChangedListener)
             }
             setupRawDrawing()
@@ -143,11 +169,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun surfaceCreated(holder: SurfaceHolder) {
-                clearSurfaceView()
+                clearSurfaceView(bitmap)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
-                holder.removeCallback(surfaceCallback)
+                // holder.removeCallback(surfaceCallback)
             }
         }
     }
@@ -159,10 +185,13 @@ class MainActivity : AppCompatActivity() {
         helper
     }
 
-    fun clearSurfaceView(): Boolean {
+    fun clearSurfaceView(bmp: Bitmap? = null): Boolean {
         val holder = surface.holder ?: return false
         val canvas = holder.lockCanvas() ?: return false
         canvas.drawColor(Color.WHITE)
+        bmp?.let {
+            canvas.drawBitmap(it, 0f, 0f, bmpPaint)
+        }
         holder.unlockCanvasAndPost(canvas)
         return true
     }
@@ -196,14 +225,90 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         touchHelper.isRawDrawingRenderEnabled = false
         touchHelper.setRawDrawingEnabled(false)
+        ensureSave()
         super.onPause()
     }
 
     override fun onDestroy() {
+        ensureCloseRawRendering()
+        super.onDestroy()
+    }
+
+    private fun ensureCloseRawRendering() {
         if (isRawDrawingOpened) {
             touchHelper.closeRawDrawing()
             isRawDrawingOpened = false
         }
-        super.onDestroy()
     }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return super.onCreateOptionsMenu(menu)
+    }
+
+    val fileName = "canvas.png"
+
+    fun ensureSave() {
+        if(!isDirty) return
+
+        openFileOutput(fileName, MODE_PRIVATE).use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            it.flush()
+        }
+        isDirty = false
+    }
+
+    fun withTempNoRawRendering(f: ()->Unit) {
+        val isRawRendering = touchHelper.isRawDrawingRenderEnabled
+        if (isRawRendering)
+        {
+            touchHelper.setRawDrawingEnabled(false)
+        }
+        f()
+        if (isRawRendering)
+        {
+            touchHelper.setRawDrawingEnabled(true)
+        }
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when(item.itemId) {
+            R.id.action_clear -> {
+                withTempNoRawRendering {
+                    clearSurfaceView()
+                    bmpCanvas.drawColor(Color.WHITE)
+                }
+                isDirty = false
+                return true
+            }
+            R.id.action_share-> {
+                withTempNoRawRendering {
+                    ensureSave()
+
+                    val path = File.createTempFile("share", ".png", cacheDir)
+                    openFileInput(fileName).use { src->
+                        path.outputStream().use { dest ->
+                            val buffer = ByteArray(1024)
+                            var i = src.read(buffer)
+                            while(i != -1) {
+                                dest.write(buffer, 0, i)
+                                i = src.read(buffer)
+                            }
+                            dest.flush()
+                        }
+                    }
+                    val uri = FileProvider.getUriForFile(this, applicationContext.packageName+".provider", path)
+                    Intent(Intent.ACTION_SEND).apply {
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        type = "image/png"
+                    }.also { startActivity(it) }
+
+                }
+            }
+
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
 }
