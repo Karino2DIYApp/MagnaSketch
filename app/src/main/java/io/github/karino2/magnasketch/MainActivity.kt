@@ -18,6 +18,7 @@ import android.view.SurfaceView
 import android.view.View
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -307,25 +308,19 @@ class MainActivity : AppCompatActivity() {
                 withTempNoRawRendering {
                     ensureSave()
 
-                    val path = File.createTempFile("magna_sketch_share", ".png", cacheDir)
+                    val path = File.createTempFile("magna_sketch_share_", ".png", cacheDir)
                     openFileInput(fileName).use { src->
                         path.outputStream().use { dest ->
-                            val buffer = ByteArray(1024)
-                            var i = src.read(buffer)
-                            while(i != -1) {
-                                dest.write(buffer, 0, i)
-                                i = src.read(buffer)
-                            }
+                            src.copyTo(dest)
                             dest.flush()
                         }
                     }
                     val uri = FileProvider.getUriForFile(this, applicationContext.packageName+".provider", path)
-                    Intent(Intent.ACTION_SEND).apply {
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        type = "image/png"
-                    }.also { startActivity(it) }
-
+                    ShareCompat.IntentBuilder(this).apply {
+                        setChooserTitle("Sharing MagnaSketch")
+                        setStream(uri)
+                        setType("image/png")
+                    }.startChooser()
                 }
             }
 
