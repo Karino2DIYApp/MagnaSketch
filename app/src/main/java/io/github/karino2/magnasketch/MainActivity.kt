@@ -301,7 +301,7 @@ class MainActivity : AppCompatActivity() {
                 withTempNoRawRendering {
                     ensureSave()
 
-                    val path = File.createTempFile("share", ".png", cacheDir)
+                    val path = File.createTempFile("magna_sketch_share", ".png", cacheDir)
                     openFileInput(fileName).use { src->
                         path.outputStream().use { dest ->
                             val buffer = ByteArray(1024)
