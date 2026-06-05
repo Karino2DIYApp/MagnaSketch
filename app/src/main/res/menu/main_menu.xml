@@ -4,7 +4,7 @@
     <item
         android:id="@+id/action_clear"
         android:title="Clear"
-        android:icon="@android:drawable/ic_menu_revert"
+        android:icon="@android:drawable/ic_menu_delete"
         app:showAsAction="ifRoom" />
     <item
         android:id="@+id/action_share"

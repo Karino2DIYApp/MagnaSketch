@@ -222,10 +222,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateBmpToSurface() {
+        surface.holder?.let { holder->
+            holder.lockCanvas()?.let { lockCanvas ->
+                lockCanvas.drawColor(Color.WHITE)
+                lockCanvas.drawBitmap(bitmap, 0f, 0f, bmpPaint)
+                holder.unlockCanvasAndPost(lockCanvas)
+            }
+        }
+    }
+
     override fun onPause() {
         touchHelper.isRawDrawingRenderEnabled = false
         touchHelper.setRawDrawingEnabled(false)
         ensureSave()
+        updateBmpToSurface()
         super.onPause()
     }
 
@@ -251,11 +262,15 @@ class MainActivity : AppCompatActivity() {
     fun ensureSave() {
         if(!isDirty) return
 
+        doSave()
+        isDirty = false
+    }
+
+    private fun doSave() {
         openFileOutput(fileName, MODE_PRIVATE).use {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
             it.flush()
         }
-        isDirty = false
     }
 
     fun withTempNoRawRendering(f: ()->Unit) {
@@ -277,6 +292,7 @@ class MainActivity : AppCompatActivity() {
                 withTempNoRawRendering {
                     clearSurfaceView()
                     bmpCanvas.drawColor(Color.WHITE)
+                    doSave()
                 }
                 isDirty = false
                 return true
