@@ -1,6 +1,5 @@
 package io.github.karino2.magnasketch
 
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -35,7 +34,7 @@ class MainActivity : AppCompatActivity() {
 
     val surface: SurfaceView by lazy { findViewById(R.id.canvas)}
 
-    private val penWidth = 3f
+    private val penWidth = 5f
     val penPaint = Paint().apply {
         isAntiAlias = true
         // isDither = true
