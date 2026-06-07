@@ -10,8 +10,8 @@ android {
         applicationId = "io.github.karino2.magnasketch"
         minSdk = 29
         targetSdk = 37
-        versionCode = 2
-        versionName = "2"
+        versionCode = 3
+        versionName = "3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
