@@ -135,7 +135,10 @@ class MainActivity : AppCompatActivity() {
     private fun setupRawDrawing() {
         if (isRawDrawingOpened) {
             val limit = surfaceVisibleRect()
-            touchHelper.setLimitRect(limit, emptyList<Rect>())
+            touchHelper.setStrokeWidth(penWidth)
+                .setStrokeColor(Color.BLACK)
+                .setLimitRect(limit, emptyList<Rect>())
+                .setStrokeStyle(TouchHelper.STROKE_STYLE_PENCIL)
             return
         }
 
