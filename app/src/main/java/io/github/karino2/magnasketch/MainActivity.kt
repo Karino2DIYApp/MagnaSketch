@@ -3,7 +3,6 @@ package io.github.karino2.magnasketch
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
@@ -14,18 +13,17 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import android.view.View
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
+import androidx.core.graphics.createBitmap
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.onyx.android.sdk.data.note.TouchPoint
-import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.pen.RawInputCallback
+import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.pen.data.TouchPointList
-import androidx.core.graphics.createBitmap
 import java.io.File
 import kotlin.math.abs
 
@@ -61,6 +59,7 @@ class MainActivity : AppCompatActivity() {
         }
         bmp
     }
+
     val bmpCanvas by lazy { Canvas(bitmap) }
 
     var isDirty = false
@@ -121,35 +120,34 @@ class MainActivity : AppCompatActivity() {
         override fun onRawErasingTouchPointListReceived(p0: TouchPointList?) {
         }
     }
-    private var isRawDrawingOpened = false
 
-    private val layoutChangedListener : View.OnLayoutChangeListener by lazy {
-        View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            if (clearSurfaceView(bitmap)) {
-                surface.removeOnLayoutChangeListener(layoutChangedListener)
-            }
-            setupRawDrawing()
+    private var lastOpenedLimit: Rect? = null
+
+    private fun applyRawDrawingSettings() {
+        val limit = surfaceVisibleRect()
+        if (!surface.holder.surface.isValid || limit.width() <= 0 || limit.height() <= 0) return
+
+        // サイズが変わっていたら、バッファ不整合を防ぐため開き直す（黒画面対策の核心）
+        if (isRawRenderingBecomesStale(limit)) {
+            ensureCloseRawRendering()
         }
-    }
 
-    private fun setupRawDrawing() {
-        if (isRawDrawingOpened) {
-            val limit = surfaceVisibleRect()
+        if (!touchHelper.isRawDrawingRenderEnabled) {
+            clearSurfaceView(bitmap)
             touchHelper.setStrokeWidth(penWidth)
                 .setStrokeColor(Color.BLACK)
                 .setLimitRect(limit, emptyList<Rect>())
                 .setStrokeStyle(TouchHelper.STROKE_STYLE_PENCIL)
-            return
+                .openRawDrawing()
+            touchHelper.isRawDrawingRenderEnabled = true
+            lastOpenedLimit = Rect(limit)
+        } else {
+            touchHelper.setLimitRect(limit, emptyList<Rect>())
         }
-
-        val limit = surfaceVisibleRect()
-        touchHelper.setStrokeWidth(penWidth)
-            .setStrokeColor(Color.BLACK)
-            .setLimitRect(limit, emptyList<Rect>())
-            .openRawDrawing()
-        touchHelper.setStrokeStyle(TouchHelper.STROKE_STYLE_PENCIL)
-        isRawDrawingOpened = true
     }
+
+    private fun isRawRenderingBecomesStale(limit: Rect): Boolean =
+        touchHelper.isRawDrawingRenderEnabled && (lastOpenedLimit == null || limit.width() != lastOpenedLimit?.width() || limit.height() != lastOpenedLimit?.height())
 
     private fun surfaceVisibleRect(): Rect {
         val limit = Rect()
@@ -161,29 +159,17 @@ class MainActivity : AppCompatActivity() {
         return limit
     }
 
-    private val surfaceCallback : SurfaceHolder.Callback by lazy {
-        object : SurfaceHolder.Callback {
-            override fun surfaceChanged(
-                holder: SurfaceHolder,
-                p1: Int,
-                p2: Int,
-                p3: Int
-            ) {
-            }
-
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                clearSurfaceView(bitmap)
-            }
-
-            override fun surfaceDestroyed(holder: SurfaceHolder) {
-                // holder.removeCallback(surfaceCallback)
-            }
+    private val surfaceCallback = object : SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: SurfaceHolder) {
+            applyRawDrawingSettings()
         }
+        override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, height: Int) {}
+        override fun surfaceDestroyed(holder: SurfaceHolder) {}
     }
 
     val touchHelper by lazy {
         val helper = TouchHelper.create(surface, inputCallback)
-        surface.addOnLayoutChangeListener(layoutChangedListener)
+        surface.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyRawDrawingSettings() }
         surface.holder.addCallback(surfaceCallback)
         helper
     }
@@ -206,7 +192,6 @@ class MainActivity : AppCompatActivity() {
             it.setIcon(R.mipmap.ic_launcher)
             it.title = ""
         }
-
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
@@ -224,11 +209,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        surface.post {
-            setupRawDrawing()
-            touchHelper.setRawDrawingEnabled(true)
-            touchHelper.isRawDrawingRenderEnabled = true
-        }
+        applyRawDrawingSettings()
     }
 
     private fun updateBmpToSurface() {
@@ -241,9 +222,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyRawDrawingSettings()
+    }
+
     override fun onPause() {
-        touchHelper.isRawDrawingRenderEnabled = false
-        touchHelper.setRawDrawingEnabled(false)
+        ensureCloseRawRendering()
         ensureSave()
         updateBmpToSurface()
         super.onPause()
@@ -255,9 +240,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ensureCloseRawRendering() {
-        if (isRawDrawingOpened) {
+        if (touchHelper.isRawDrawingRenderEnabled) {
+            touchHelper.isRawDrawingRenderEnabled = false
             touchHelper.closeRawDrawing()
-            isRawDrawingOpened = false
         }
     }
 
