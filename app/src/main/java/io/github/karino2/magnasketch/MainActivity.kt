@@ -153,9 +153,6 @@ class MainActivity : AppCompatActivity() {
         val limit = Rect()
         surface.getLocalVisibleRect(limit)
 
-        // I don't know the reason, but this geometry seems to low for 40px.
-        // offset here.
-        limit.offset(0, -40)
         return limit
     }
 
