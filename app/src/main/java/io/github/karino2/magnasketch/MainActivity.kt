@@ -139,6 +139,7 @@ class MainActivity : AppCompatActivity() {
                 .setLimitRect(limit, emptyList<Rect>())
                 .setStrokeStyle(TouchHelper.STROKE_STYLE_PENCIL)
                 .openRawDrawing()
+            touchHelper.setRawDrawingEnabled(true)
             touchHelper.isRawDrawingRenderEnabled = true
             lastOpenedLimit = Rect(limit)
         } else {
@@ -238,6 +239,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun ensureCloseRawRendering() {
         if (touchHelper.isRawDrawingRenderEnabled) {
+            touchHelper.setRawDrawingEnabled(false)
             touchHelper.isRawDrawingRenderEnabled = false
             touchHelper.closeRawDrawing()
         }
